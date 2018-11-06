@@ -11,9 +11,9 @@ add_definitions(-DIL_STD)
 file(GLOB HGJPathSmoothFILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
         include/HGJPathSmooth/*.cpp include/HGJPathSmooth/*.h)
 
-add_executable(helloCplex main.cpp)
+add_executable(main main.cpp)
 add_executable(lp ilolpex1.cpp)
 add_library(HGJ_Path_Smooth ${HGJPathSmoothFILES})
 
 target_link_libraries(lp ilocplex cplex concert m pthread dl)
-target_link_libraries(helloCplex ilocplex cplex concert m pthread dl)
+target_link_libraries(main ilocplex cplex concert m pthread dl HGJ_Path_Smooth)
