@@ -19,8 +19,10 @@ private:
 
 public:
     pathPlanner();
-    HGJ::WayPoints genCurv(HGJ::WayPoints wayPoints, double samplePeriod,
-                           double maxErr);
+    HGJ::WayPoints genCurv(const WayPoints & wayPoints, const double & samplePeriod,
+                           const double & maxErr);
+
+    void setMaxSpeed(double maxSpeed);
 };
 
 

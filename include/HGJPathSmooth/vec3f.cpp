@@ -45,18 +45,22 @@ double HGJ::vec3f::len() const {
     return sqrt(x * x + y * y + z * z);
 }
 
-HGJ::vec3f & HGJ::vec3f::operator/=(double b) {
+HGJ::vec3f & HGJ::vec3f::operator/=(double b) noexcept {
     x /= b;
     y /= b;
     z /= b;
     return *this;
 }
 
-HGJ::vec3f & HGJ::vec3f::operator*=(double b) {
+HGJ::vec3f & HGJ::vec3f::operator*=(double b) noexcept {
     x *= b;
     y *= b;
     z *= b;
     return *this;
+}
+
+double HGJ::vec3f::operator* (const HGJ::vec3f & b) const {
+    return x * b.x + y * b.y + z * b.z;
 }
 
 
