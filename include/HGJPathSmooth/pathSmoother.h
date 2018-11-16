@@ -6,6 +6,7 @@
 #define HELLOCPLEX_PATHPLANNER_H
 
 #include "vec3f.h"
+#include "TurnPoint.h"
 #include <vector>
 
 namespace HGJ {
@@ -16,6 +17,8 @@ namespace HGJ {
 class HGJ::pathPlanner {
 private:
     double maxSpeed = 2.0;
+    double maxErr = 0.5;
+    double ts = 0.01;
 
 public:
     pathPlanner();
@@ -23,6 +26,9 @@ public:
                            const double & maxErr);
 
     void setMaxSpeed(double maxSpeed);
+
+private:
+    std::vector<double> lpSolveTheDs(const std::vector<TurnPoint> & turnPoints);
 };
 
 

@@ -17,6 +17,6 @@ HGJ::TurnPoint_s::TurnPoint_s(const HGJ::vec3f & p0, const HGJ::vec3f & p1,
 
 }
 
-double HGJ::TurnPoint_s::coeff_d2Kmax() {
+double HGJ::TurnPoint_s::coeff_d2Kmax() const {
     return pow(cos(beta), 2) / (c5 * sin(beta));
 }

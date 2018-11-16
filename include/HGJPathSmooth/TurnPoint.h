@@ -30,7 +30,7 @@ namespace HGJ {
         double speed = 0.0;
 
         TurnPoint_s(const vec3f & p0, const vec3f & p1, const vec3f & p2);
-        double coeff_d2Kmax();
+        double coeff_d2Kmax() const;
     } TurnPoint;
 }
 
