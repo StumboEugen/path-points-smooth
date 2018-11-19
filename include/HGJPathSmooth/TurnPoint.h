@@ -37,6 +37,17 @@ namespace HGJ {
 
         TurnPoint_s(const vec3f & p0, const vec3f & p1, const vec3f & p2);
 
+        void completeSpdModify() {
+            spdModifiedComplete = true;
+        }
+
+        bool isSpdModifiedComplete() const {
+            return spdModifiedComplete;
+        }
+    private:
+        // if the speed has modified complete
+        bool spdModifiedComplete = false;
+
     } TurnPoint;
 }
 

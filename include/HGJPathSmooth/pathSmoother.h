@@ -15,12 +15,33 @@ namespace HGJ {
 }
 
 class HGJ::pathPlanner {
+
+    /**
+     * @enum UNSET not set
+     * @enum ONEACC speed up to the target
+     * @enum SPDUPDOWN speedup to a faster speed then quick down to v2
+     * @enum TOMAXSPD can acc to max speed
+     */
+    enum LinearSpdType {
+        /// not set
+                UNSET = 0,
+        /// speed up to the target
+                ONEACC = 1,
+        /// speedup to a faster speed then quick down to v2
+                SPDUPDOWN = 2,
+        /// can acc to max speed
+                TOMAXSPD = 3
+    };
+
 private:
     std::vector<TurnPoint> turnPoints;
+    std::vector<std::pair<LinearSpdType, double>> lineTypes;
     double jerkMax = 2.0;
     double accMax = 1.0;
     double spdMax = 2.0;
     double maxErr = 0.5;
+    double beginSpd = 0.0;
+    double endSpd = 0.0;
     double ts = 0.01;
 
 public:
@@ -36,6 +57,10 @@ public:
     void setMaxSpeed(double spdMax);
 
     void setMaxErr(double maxErr);
+
+    void setBeginSpd(double beginSpd);
+
+    void setEndSpd(double endSpd);
 
 private:
     void lpSolveTheDs(std::vector<TurnPoint> & turnPoints);
@@ -65,7 +90,18 @@ private:
      */
     inline double calChangeSpdDistance(double v0, double v1);
 
+    /**
+     * cal the fastest(lowest) speed we can get when we move through a dist
+     * @param v0 the begin spd
+     * @param dist the dist
+     * @param faster find the fastest or the lowest
+     * @return the fastest or the lowest speed
+     */
     inline double calBestSpdFromDistance(double v0, double dist, bool faster = true);
+
+    inline std::pair<LinearSpdType, double> calLineType(double v0, double v1, double dist);
+
+    inline double calLineDistance(double v0, double v1, double vMid);
 };
 
 
