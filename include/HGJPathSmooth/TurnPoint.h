@@ -39,6 +39,10 @@ namespace HGJ {
         // the half len of the curve, it's not accurate(smaller than real)
         double halfLength = 0.0;
 
+        // the bezier controll points
+        vec3f B1[4];
+        vec3f B2[4];
+
         TurnPoint_s(const vec3f & p0, const vec3f & p1, const vec3f & p2);
 
         void completeSpdModify() {
@@ -53,16 +57,9 @@ namespace HGJ {
 
         vec3f calPoint(double u, bool isPartOne) const;
 
-        friend void HGJ::pathPlanner::assignTurnPartPoints
-                (const TurnPoint_s & turnPoint, bool firstPart);
-
     private:
         // if the speed has modified complete
         bool spdModifiedComplete = false;
-
-        // the bezier controll points
-        vec3f B1[4];
-        vec3f B2[4];
 
     } TurnPoint;
 }

@@ -51,7 +51,7 @@ private:
 
 public:
     pathPlanner();
-    HGJ::WayPoints
+    const WayPoints &
     genCurv(const WayPoints & wayPoints, double samplePeriod, double maxErr,
             double beginSpd = 0.0, double endSpd = 0.0);
 
@@ -127,13 +127,15 @@ private:
      * @param beginV the begin vel (might be smaller)
      * @param endV the end vel
      */
-    void assignSpdChangePoints(double beginV, double endV, vec3f posBegin, vec3f posEnd);
+    void assignSpdChangePoints(double beginV, double endV, const vec3f & posBegin,
+                               const vec3f & posEnd);
 
     /**
      * assign the points to answePoints at constrant speed stage
      * @param spd the speed
      */
-    void assignLinearConstantSpeedPoints(double spd, vec3f posBegin, vec3f posEnd);
+    void assignLinearConstantSpeedPoints(double spd, const vec3f & posBegin,
+                                         const vec3f & posEnd);
 
     /**
      * assign the points to answerPoints at turning stage
@@ -141,6 +143,8 @@ private:
      * @param firstPart if it is the first bezier part, there are two parts in a turnning
      */
     void assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart);
+
+    void assignLinePartPoints(uint64_t index);
 };
 
 

@@ -78,4 +78,8 @@ HGJ::vec3f HGJ::operator*(double d, const HGJ::vec3f & b) {
     return temp;
 }
 
+HGJ::vec3f HGJ::operator*(const HGJ::vec3f & b, double d) {
+    return d * b;
+}
+
 

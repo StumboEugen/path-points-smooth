@@ -16,7 +16,7 @@ using namespace std;
 
 HGJ::pathPlanner::pathPlanner() = default;
 
-HGJ::WayPoints
+const HGJ::WayPoints &
 HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                           double beginSpd, double endSpd) {
     pathPlanner::maxErr = maxErr;
@@ -211,15 +211,16 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
      */
 
     resDis = 0.0;
+    answerCurve.emplace_back(wayPoints.front());
 
-
-    for (uint32_t i = 1; i < lineTypes.size() - 1; ++i) {
-
+    for (uint32_t i = 0; i < turnPoints.size(); ++i) {
+        assignLinePartPoints(i);
+        assignTurnPartPoints(turnPoints[i], true);
+        assignTurnPartPoints(turnPoints[i], false);
     }
+    assignLinePartPoints(lineTypes.size() - 1);
 
-    WayPoints ans;
-
-    return ans;
+    return answerCurve;
 }
 
 void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
@@ -456,7 +457,7 @@ double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, do
 }
 
 void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
-                                             vec3f posBegin, vec3f posEnd) {
+                                             const vec3f & posBegin, const vec3f & posEnd) {
     auto unitVec = (posEnd - posBegin);
     unitVec /= unitVec.len();
     double dv = endV - beginV;
@@ -478,8 +479,8 @@ void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
     }
 }
 
-void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, HGJ::vec3f posBegin,
-                                                       HGJ::vec3f posEnd) {
+void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, const vec3f & posBegin,
+                                                       const vec3f & posEnd) {
     auto unitVec = (posEnd - posBegin);
     double sumT = unitVec.len() / spd;
     unitVec /= unitVec.len();
@@ -516,7 +517,7 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
     if (firstPart) {
         lastPoint = turnPoint.B1[0];
     } else {
-        lastPoint = turnPoint.B2[0];
+        lastPoint = turnPoint.B2[3];
     }
 
     // considering the res error, the first currentU, targetLen is different
@@ -551,10 +552,62 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
     if (firstPart) {
         resDis = (answerCurve.back() - turnPoint.B1[3]).len();
     } else {
-        resDis = (answerCurve.back() - turnPoint.B2[3]).len();
+        resDis = (answerCurve.back() - turnPoint.B2[0]).len();
     }
 }
 
+void HGJ::pathPlanner::assignLinePartPoints(uint64_t index) {
+    vec3f beginPos, endPos;
+    double beginSpd, endSpd;
+    if (index == 0) {
+        beginPos = turnPoints.front().p0;
+        beginSpd = pathPlanner::beginSpd;
+    } else {
+        beginPos = turnPoints[index - 1].B2[0];
+        beginSpd = turnPoints[index - 1].speed;
+    }
+
+    if (index == lineTypes.size() - 1) {
+        endPos = turnPoints.back().p2;
+        endSpd = pathPlanner::endSpd;
+    } else {
+        endPos = turnPoints[index].B1[0];
+        endSpd = turnPoints[index].speed;
+    }
+
+    auto lineType = lineTypes[index].first;
+    auto lineMaxSpd = lineTypes[index].second;
+
+    if (lineType == ONEACC) {
+        assignSpdChangePoints(beginSpd, endSpd, beginPos, endPos);
+        return;
+
+    } else if (lineType == SPDUPDOWN || lineType == TOMAXSPD) {
+        vec3f unitVec = (endPos - beginPos) / (endPos - beginPos).len();
+
+        auto firstMaxSpdDis = calChangeSpdDistance(beginSpd, lineMaxSpd);
+        auto firstMaxSpdPos = (unitVec * firstMaxSpdDis) + beginPos;
+
+        auto endSpdChangeDis = calChangeSpdDistance(lineMaxSpd, endSpd);
+        auto endMaxSpdPos = endPos - unitVec * endSpdChangeDis;
+
+        assignSpdChangePoints(beginSpd, lineMaxSpd, beginPos, firstMaxSpdPos);
+
+        if (lineType == TOMAXSPD) {
+            assignLinearConstantSpeedPoints(lineMaxSpd, firstMaxSpdPos, endMaxSpdPos);
+        }
+
+        assignSpdChangePoints(lineMaxSpd, endSpd, endMaxSpdPos, endPos);
+
+        return;
+    } else if (lineType == UNSET) {
+        cerr << "assign a line with UNSET type!" << endl;
+        throw;
+    } else {
+        cerr << "assign a line with UNKNOW type!" << endl;
+        throw;
+    }
+}
 
 void HGJ::pathPlanner::setMaxJerk(double jerkMax) {
     pathPlanner::jerkMax = jerkMax;
