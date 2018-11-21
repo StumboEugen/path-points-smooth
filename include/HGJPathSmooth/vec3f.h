@@ -16,6 +16,7 @@ class HGJ::vec3f{
 
     friend vec3f operator* (double d, const vec3f & b);
 
+    //TODO 重载运算符 <<
 private:
     double x = 0.0;
     double y = 0.0;

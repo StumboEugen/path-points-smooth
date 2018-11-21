@@ -1,5 +1,7 @@
 #include <iostream>
 #include <ilcplex/ilocplex.h>
+#include <fstream>
+
 #include "HGJPathSmooth/pathSmoother.h"
 
 using namespace std;
@@ -22,6 +24,12 @@ int main() {
                               {-0.5, 0,  0},
                               {0,    0,  0}}, 0.01, 0.08, 0, 0);
     cout << "complete" << endl;
+
+    fstream fs;
+    fs.open("curv", ios::out);
+    for (const auto & point: a) {
+
+    }
 //    planner.genCurv({{0,0,0},{0.5,0,0},{0.5,-1,0},{-0.5,-1,0},{-0.5,0,0},{0,0,0}}, 0.01, 0.08);
 //    planner.genCurv({{0,0,0},{0.5,0,0},{0.5,-1,0},{-0.5,-1,0},{-0.5,0,0},{0,0,0}}, 0.01, 0.08);
 //    planner.genCurv({{0,0,0},{0.5,0,0},{0.5,-1,0},{-0.5,-1,0},{-0.5,0,0},{0,0,0}}, 0.01, 0.08);
