@@ -7,9 +7,13 @@
 
 namespace HGJ {
     class vec3f;
+
+    vec3f operator* (double d, const vec3f & b);
 }
 
 class HGJ::vec3f{
+
+    friend vec3f operator* (double d, const vec3f & b);
 
 private:
     double x;
@@ -25,13 +29,13 @@ public:
 
     double operator* (const vec3f & b) const;
 
-    vec3f operator* (const double& b) const;
-
     vec3f operator/ (const double& b) const;
 
     vec3f& operator/=(double b) noexcept;
 
     vec3f& operator*=(double b) noexcept;
+
+    vec3f operator+=(const vec3f & b) noexcept;
 
     double len() const;
 };

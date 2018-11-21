@@ -25,13 +25,13 @@ HGJ::vec3f HGJ::vec3f::operator+(const HGJ::vec3f & b) const {
     return res;
 }
 
-HGJ::vec3f HGJ::vec3f::operator*(const double & b) const {
-    vec3f res;
-    res.x = this->x * b;
-    res.y = this->y * b;
-    res.z = this->z * b;
-    return res;
-}
+//HGJ::vec3f HGJ::vec3f::operator*(const double & b) const {
+//    vec3f res;
+//    res.x = this->x * b;
+//    res.y = this->y * b;
+//    res.z = this->z * b;
+//    return res;
+//}
 
 HGJ::vec3f HGJ::vec3f::operator/(const double & b) const {
     vec3f res;
@@ -61,6 +61,21 @@ HGJ::vec3f & HGJ::vec3f::operator*=(double b) noexcept {
 
 double HGJ::vec3f::operator* (const HGJ::vec3f & b) const {
     return x * b.x + y * b.y + z * b.z;
+}
+
+HGJ::vec3f HGJ::vec3f::operator+=(const HGJ::vec3f & b) noexcept {
+    x += b.x;
+    y += b.y;
+    z += b.z;
+    return *this;
+}
+
+HGJ::vec3f HGJ::operator*(double d, const HGJ::vec3f & b) {
+    vec3f temp = b;
+    temp.x *= d;
+    temp.y *= d;
+    temp.z *= d;
+    return temp;
 }
 
 

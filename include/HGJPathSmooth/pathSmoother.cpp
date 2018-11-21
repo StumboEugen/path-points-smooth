@@ -90,8 +90,8 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     for (uint64_t i = 1; i < turnPoints.size(); i++) {
         auto & thisTurn = turnPoints[i];
         auto & lastTurn = turnPoints[i - 1];
-        auto dis = calChangeSpdDistance(lastTurn.speed, thisTurn.speed);
-        if (dis < thisTurn.lenBefore - thisTurn.d - lastTurn.d) {
+        auto minDis = calChangeSpdDistance(lastTurn.speed, thisTurn.speed);
+        if (minDis > thisTurn.lenBefore - thisTurn.d - lastTurn.d) {
             if (thisTurn.speed <= lastTurn.speed) {
                 violations[thisTurn.speed].push_back(i);
             } else {
@@ -189,7 +189,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     lineTypes.front() = calLineType(beginSpd, turnPoints.front().speed,
             turnPoints.front().lenBefore - turnPoints.front().d);
 
-    for (uint64_t index_line = 0; index_line < lineTypes.size() - 1; ++index_line) {
+    for (uint64_t index_line = 1; index_line < lineTypes.size() - 1; ++index_line) {
         auto & beforeTurn = turnPoints[index_line - 1];
         auto & afterTurn = turnPoints[index_line];
         lineTypes[index_line] = calLineType(beforeTurn.speed, afterTurn.speed,
@@ -202,6 +202,12 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     /**
      * plan the speed according to the ts
      */
+
+
+
+    for (uint32_t i = 1; i < lineTypes.size() - 1; ++i) {
+
+    }
 
     WayPoints ans;
 
@@ -293,8 +299,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
 
     for (int i = 0; i < ds.getSize() - 1; i++) {
         auto & tp = turnPoints[i];
-        tp.d = static_cast<double>(ds[i]);
-        tp.maxSpd = min(sqrt(accMax * tp.d * tp.coeff_d2Kmax), spdMax);
+        tp.setD(static_cast<double>(ds[i]), spdMax, accMax);
     }
 
     env.end();
@@ -389,30 +394,47 @@ double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool fas
 
 pair<HGJ::pathPlanner::LinearSpdType, double>
 HGJ::pathPlanner::calLineType(double v0, double v1, double dist) {
+    /**
+     * the min lenth means the speed change is only speed up or speed down from v0 to v1
+     */
     double minDist = calChangeSpdDistance(v0, v1);
-    if (dist < minDist * 1.05) {
+    if (dist < minDist * 1.025) {
         return make_pair(ONEACC, max(v0, v1));
     }
 
     double maxDist = calLineDistance(v0, v1, spdMax);
     double distDiff = maxDist - dist;
 
+    /**
+     * if maxDist < dist, means we can speed up to the max speed in the line
+     */
     if (distDiff < 0) {
-        return make_pair(SPDUPDOWN, spdMax);
+        return make_pair(TOMAXSPD, spdMax);
     }
 
-    double midSpd = spdMax;
-    double biggerV = max(v0, v1);
+    double upperBound = spdMax;
+    double lowerBound = max(v0, v1);
+    double midSpd = (upperBound + lowerBound) / 2;
+    double tollerance = dist / 10000.0;
 
     while (true) {
         distDiff = calLineDistance(v0, v1, midSpd) - dist;
-        if (distDiff > 0.0) {
-            midSpd = (midSpd + biggerV) / 2.0;
+        /**
+         * CaledDist > realDist  ==>  spd need to be slower
+         */
+        if (distDiff > tollerance) {
+            upperBound = midSpd;
+            midSpd = (midSpd + lowerBound) / 2.0;
         }
-        else if(distDiff < - dist / 10000.0) {
-            midSpd = (midSpd + spdMax) / 2.0;
+        /**
+         * CaledDist > realDist  ==>  spd can be higher
+         */
+        else if(distDiff < 0) {
+            lowerBound = midSpd;
+            midSpd = (midSpd + upperBound) / 2.0;
+        } else {
+            break;
         }
-        break;
     }
 
     return make_pair(SPDUPDOWN, midSpd);

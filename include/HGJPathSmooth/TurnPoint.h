@@ -44,9 +44,16 @@ namespace HGJ {
         bool isSpdModifiedComplete() const {
             return spdModifiedComplete;
         }
+
+        void setD(double d, double spdMax, double accMax);
+
+        vec3f calPoint(double u, bool partOne);
     private:
         // if the speed has modified complete
         bool spdModifiedComplete = false;
+
+        vec3f B1[4];
+        vec3f B2[4];
 
     } TurnPoint;
 }
