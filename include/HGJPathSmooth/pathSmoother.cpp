@@ -211,7 +211,6 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
      */
 
     resDis = 0.0;
-    answerCurve.emplace_back(wayPoints.front());
 
     for (uint32_t i = 0; i < turnPoints.size(); ++i) {
         assignLinePartPoints(i);
@@ -463,6 +462,9 @@ void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
     double dv = endV - beginV;
     double sumT = calChangeSpdDuration(dv);
     double t = ts - resDis / beginV;
+    if (beginV == 0.0) {
+        t = 0.0;
+    }
     double progress;
 
     while (t < sumT) {
@@ -523,30 +525,39 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
     // considering the res error, the first currentU, targetLen is different
     double currentU = firstIncU;
     vec3f currentPoint = turnPoint.calPoint(currentU, firstPart);
-
     double targetLen = ds - resDis;
-    double error = targetLen;
-
     double lenNow = (currentPoint - lastPoint).len();
+    double error = targetLen - lenNow;
 
     double tolleranceError = ds / 40.0;
 
-    while (currentU <= 1.0) {
-        while (abs(error) < tolleranceError) {
+    while (true) {
+        while (abs(error) > tolleranceError) {
             // we need to modify the current U
             // de/du = -len(C0C1) / delta(U)
-            double dedu = -lenNow / (currentU - lastU);
+            double dedu = lenNow / (currentU - lastU);
             // newU = lastU + error / (de/du)
             currentU = currentU + error / dedu;
+            if (currentU > 1.2) {
+                break;
+            }
             currentPoint = turnPoint.calPoint(currentU, firstPart);
             lenNow = (currentPoint - lastPoint).len();
             error = targetLen - lenNow;
         }
+
+        if (currentU > 1.0) {
+            break;
+        }
+
         lastPoint = currentPoint;
         answerCurve.emplace_back(currentPoint);
         targetLen = ds;
         lastU = currentU;
         currentU = lastU + increaseU;
+        currentPoint = turnPoint.calPoint(currentU, firstPart);
+        lenNow = (currentPoint - lastPoint).len();
+        error = targetLen - lenNow;
     }
 
     if (firstPart) {
@@ -595,10 +606,10 @@ void HGJ::pathPlanner::assignLinePartPoints(uint64_t index) {
 
         if (lineType == TOMAXSPD) {
             assignLinearConstantSpeedPoints(lineMaxSpd, firstMaxSpdPos, endMaxSpdPos);
+            assignSpdChangePoints(lineMaxSpd, endSpd, endMaxSpdPos, endPos);
+        } else {
+            assignSpdChangePoints(lineMaxSpd, endSpd, firstMaxSpdPos, endPos);
         }
-
-        assignSpdChangePoints(lineMaxSpd, endSpd, endMaxSpdPos, endPos);
-
         return;
     } else if (lineType == UNSET) {
         cerr << "assign a line with UNSET type!" << endl;
