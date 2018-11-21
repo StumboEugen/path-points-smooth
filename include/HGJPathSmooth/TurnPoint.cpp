@@ -23,7 +23,7 @@ HGJ::TurnPoint_s::TurnPoint_s(const HGJ::vec3f & p0, const HGJ::vec3f & p1,
     coeff_d2Kmax = cb * cb / (c5 * sin(beta));
 }
 
-HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool partOne) {
+HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool isPartOne) const {
     if (u < 0 || u > 1.0) {
         cerr << "[TurnPoint_s::calPoint] the paramater u:" << u << "is not valid!";
         if (u < 0) {
@@ -39,7 +39,7 @@ HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool partOne) {
     double uu2 = uu * uu;
     double uu3 = uu2 * uu;
     vec3f point{0,0,0};
-    if (partOne) {
+    if (isPartOne) {
         point += uu3 * B1[0];
         point += 3.0 * uu2 * u1 *B1[1];
         point += 3.0 * uu * u2 * B1[2];
@@ -56,6 +56,7 @@ HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool partOne) {
 void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
     TurnPoint::d = d;
     TurnPoint::maxSpd = min(sqrt(accMax * TurnPoint::d * TurnPoint::coeff_d2Kmax), spdMax);
+
     B1[0] = p1 - t1 * d;
     B1[1] = p1 - t1 * d * (1 - c1 * c3);
     B1[2] = p1 - t1 * d * (1 - c1 * c3 - c3);
@@ -66,5 +67,8 @@ void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
 
     B1[3] = (B1[2] + B2[2]) / 2.0;
     B2[3] = B1[3];
+
+    //TODO check if this is O
+    halfLength = (B1[0] - B1[1]).len() + (B1[3] - B1[1]).len();
 }
 

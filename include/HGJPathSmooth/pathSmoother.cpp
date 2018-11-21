@@ -39,6 +39,13 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
 
     //TODO consider the count == 3
 
+    curveLength = 0.0;
+    for (uint64_t i = 1; i < pointCount; ++i) {
+        curveLength += (wayPoints[i] - wayPoints[i-1]).len();
+    }
+
+    answerCurve.clear();
+
     lineTypes.clear();
     lineTypes.reserve(static_cast<unsigned long>(lineCount));
     lineTypes.assign(static_cast<unsigned long>(lineCount), make_pair(UNSET, 0));
@@ -203,6 +210,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
      * plan the speed according to the ts
      */
 
+    resDis = 0.0;
 
 
     for (uint32_t i = 1; i < lineTypes.size() - 1; ++i) {
@@ -300,6 +308,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
     for (int i = 0; i < ds.getSize() - 1; i++) {
         auto & tp = turnPoints[i];
         tp.setD(static_cast<double>(ds[i]), spdMax, accMax);
+        curveLength += 2 * (tp.halfLength - tp.d);
     }
 
     env.end();
@@ -311,14 +320,6 @@ double HGJ::pathPlanner::calChangeSpdDuration(double dv) {
     double t2 = 5.7735 * dv / jerkMax;
     t2 = sqrt(t2);
     return max(t1, t2);
-}
-
-double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, double sumT) {
-    double tRatio = t / sumT;
-    double ans = 2.5 - (3 - tRatio) * tRatio;
-    ans = ans * tRatio * tRatio * tRatio * dv + v0;
-    cout << ans << endl;
-    return ans * t;
 }
 
 double HGJ::pathPlanner::calChangeSpdDistance(double v0, double v1) {
@@ -446,6 +447,114 @@ double HGJ::pathPlanner::calLineDistance(double v0, double v1, double vMid) {
     return dist;
 }
 
+double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, double sumT) {
+    double tRatio = t / sumT;
+    double ans = 2.5 - (3 - tRatio) * tRatio;
+    ans = ans * tRatio * tRatio * tRatio * dv + v0;
+    cout << ans << endl;
+    return ans * t;
+}
+
+void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
+                                             vec3f posBegin, vec3f posEnd) {
+    auto unitVec = (posEnd - posBegin);
+    unitVec /= unitVec.len();
+    double dv = endV - beginV;
+    double sumT = calChangeSpdDuration(dv);
+    double t = ts - resDis / beginV;
+    double progress;
+
+    while (t < sumT) {
+        progress = calChangeSpdPosition(beginV, dv, t, sumT);
+        answerCurve.emplace_back(posBegin + unitVec * progress);
+        t += ts;
+    }
+
+    resDis = (answerCurve.back() - posEnd).len();
+
+    if (resDis < 0) {
+        cerr << "[pathPlanner::calChangeSpdPosition] reDis:" << resDis
+             <<" is smaller than ""0!" << endl;
+    }
+}
+
+void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, HGJ::vec3f posBegin,
+                                                       HGJ::vec3f posEnd) {
+    auto unitVec = (posEnd - posBegin);
+    double sumT = unitVec.len() / spd;
+    unitVec /= unitVec.len();
+    double t = ts - resDis / spd;
+
+    while (t < sumT) {
+        answerCurve.emplace_back(t * spd * unitVec + posBegin);
+        t += ts;
+    }
+
+    resDis = (answerCurve.back() - posEnd).len();
+
+    if (resDis < 0) {
+        cerr << "[pathPlanner::assignLinearConstantSpeedPoints] reDis:" << resDis
+             <<" is smaller than ""0!" << endl;
+    }
+}
+
+void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart) {
+    double ds = ts * turnPoint.speed;
+
+    //TODO RELEASE2DELETE
+    if (ds < resDis) {
+        cerr << "[pathPlanner::assignTurnPartPoints] the first Inc is < 0 !\nfirst part:"
+             << firstPart << endl;
+        resDis = ds;
+    }
+
+    double increaseU = ds / turnPoint.halfLength;
+    double firstIncU = (ds - resDis) / turnPoint.halfLength;
+
+    double lastU = 0.0;
+    vec3f lastPoint;
+    if (firstPart) {
+        lastPoint = turnPoint.B1[0];
+    } else {
+        lastPoint = turnPoint.B2[0];
+    }
+
+    // considering the res error, the first currentU, targetLen is different
+    double currentU = firstIncU;
+    vec3f currentPoint = turnPoint.calPoint(currentU, firstPart);
+
+    double targetLen = ds - resDis;
+    double error = targetLen;
+
+    double lenNow = (currentPoint - lastPoint).len();
+
+    double tolleranceError = ds / 40.0;
+
+    while (currentU <= 1.0) {
+        while (abs(error) < tolleranceError) {
+            // we need to modify the current U
+            // de/du = -len(C0C1) / delta(U)
+            double dedu = -lenNow / (currentU - lastU);
+            // newU = lastU + error / (de/du)
+            currentU = currentU + error / dedu;
+            currentPoint = turnPoint.calPoint(currentU, firstPart);
+            lenNow = (currentPoint - lastPoint).len();
+            error = targetLen - lenNow;
+        }
+        lastPoint = currentPoint;
+        answerCurve.emplace_back(currentPoint);
+        targetLen = ds;
+        lastU = currentU;
+        currentU = lastU + increaseU;
+    }
+
+    if (firstPart) {
+        resDis = (answerCurve.back() - turnPoint.B1[3]).len();
+    } else {
+        resDis = (answerCurve.back() - turnPoint.B2[3]).len();
+    }
+}
+
 
 void HGJ::pathPlanner::setMaxJerk(double jerkMax) {
     pathPlanner::jerkMax = jerkMax;
@@ -470,3 +579,6 @@ void HGJ::pathPlanner::setBeginSpd(double beginSpd) {
 void HGJ::pathPlanner::setEndSpd(double endSpd) {
     pathPlanner::endSpd = endSpd;
 }
+
+
+

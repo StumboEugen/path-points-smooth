@@ -34,6 +34,9 @@ class HGJ::pathPlanner {
     };
 
 private:
+    // it is not accurate
+    double curveLength;
+    WayPoints answerCurve;
     std::vector<TurnPoint> turnPoints;
     std::vector<std::pair<LinearSpdType, double>> lineTypes;
     double jerkMax = 2.0;
@@ -43,6 +46,8 @@ private:
     double beginSpd = 0.0;
     double endSpd = 0.0;
     double ts = 0.01;
+    // the little gap rest when last progress not finished
+    double resDis;
 
 public:
     pathPlanner();
@@ -99,9 +104,43 @@ private:
      */
     inline double calBestSpdFromDistance(double v0, double dist, bool faster = true);
 
+    /**
+     * cal the line type according to the begin speed, end speed and the distance
+     * @param v0 begin speed of this line part
+     * @param v1 end speed of this line part
+     * @param dist the distance of this line
+     * @return the line type of this part
+     */
     inline std::pair<LinearSpdType, double> calLineType(double v0, double v1, double dist);
 
+    /**
+     * cal the min distance needed when using the v0 v1 and vMind
+     * @param v0 begin speed
+     * @param v1 end speed
+     * @param vMid the max speed in the middle[
+     * @return the min distance needed
+     */
     inline double calLineDistance(double v0, double v1, double vMid);
+
+    /**
+     * assign the points to answerPoints at speed change stage
+     * @param beginV the begin vel (might be smaller)
+     * @param endV the end vel
+     */
+    void assignSpdChangePoints(double beginV, double endV, vec3f posBegin, vec3f posEnd);
+
+    /**
+     * assign the points to answePoints at constrant speed stage
+     * @param spd the speed
+     */
+    void assignLinearConstantSpeedPoints(double spd, vec3f posBegin, vec3f posEnd);
+
+    /**
+     * assign the points to answerPoints at turning stage
+     * @param turnPoint the turnning part
+     * @param firstPart if it is the first bezier part, there are two parts in a turnning
+     */
+    void assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart);
 };
 
 

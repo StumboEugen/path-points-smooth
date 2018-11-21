@@ -9,6 +9,8 @@
 #include "vec3f.h"
 
 namespace HGJ {
+    class pathPlanner;
+
     typedef struct TurnPoint_s {
         /**
          * the sequence of these paramaters CAN NOT be changed, for correct init
@@ -34,6 +36,8 @@ namespace HGJ {
         double speed = 0.0;
         // d * coeff_d2Kmax = Kmax
         double coeff_d2Kmax;
+        // the half len of the curve, it's not accurate(smaller than real)
+        double halfLength = 0.0;
 
         TurnPoint_s(const vec3f & p0, const vec3f & p1, const vec3f & p2);
 
@@ -47,11 +51,16 @@ namespace HGJ {
 
         void setD(double d, double spdMax, double accMax);
 
-        vec3f calPoint(double u, bool partOne);
+        vec3f calPoint(double u, bool isPartOne) const;
+
+        friend void HGJ::pathPlanner::assignTurnPartPoints
+                (const TurnPoint_s & turnPoint, bool firstPart);
+
     private:
         // if the speed has modified complete
         bool spdModifiedComplete = false;
 
+        // the bezier controll points
         vec3f B1[4];
         vec3f B2[4];
 
