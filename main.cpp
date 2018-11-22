@@ -28,7 +28,7 @@ int main() {
     fstream fs;
     fs.open("curv", ios::out);
     for (const auto & point: a) {
-
+        fs << point << endl;
     }
 //    planner.genCurv({{0,0,0},{0.5,0,0},{0.5,-1,0},{-0.5,-1,0},{-0.5,0,0},{0,0,0}}, 0.01, 0.08);
 //    planner.genCurv({{0,0,0},{0.5,0,0},{0.5,-1,0},{-0.5,-1,0},{-0.5,0,0},{0,0,0}}, 0.01, 0.08);

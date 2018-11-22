@@ -78,6 +78,11 @@ HGJ::vec3f HGJ::operator*(double d, const HGJ::vec3f & b) {
     return temp;
 }
 
+std::ostream & HGJ::operator<<(std::ostream & os, const HGJ::vec3f &v) {
+    os << v.x << "," << v.y << "," << v.z;
+    return os;
+}
+
 HGJ::vec3f HGJ::operator*(const HGJ::vec3f & b, double d) {
     return d * b;
 }

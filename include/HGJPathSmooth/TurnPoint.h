@@ -57,6 +57,12 @@ namespace HGJ {
 
         vec3f calPoint(double u, bool isPartOne) const;
 
+        /**
+         * cal the len of one bezier curve(there are two in one turn)
+         * @return the len of one curve
+         */
+        double calPreciseHalfLen();
+
     private:
         // if the speed has modified complete
         bool spdModifiedComplete = false;

@@ -308,6 +308,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
     for (int i = 0; i < ds.getSize() - 1; i++) {
         auto & tp = turnPoints[i];
         tp.setD(static_cast<double>(ds[i]), spdMax, accMax);
+//        tp.calPreciseHalfLen();
         curveLength += 2 * (tp.halfLength - tp.d);
     }
 
@@ -347,7 +348,7 @@ inline double calFunc(double v0, double v1) {
 double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool faster) {
 
     if (!faster) {
-        cout << "slower example" << endl;
+        cerr << "slower example" << endl;
     }
 
     if (abs(dist) < 0.01) {
@@ -451,7 +452,6 @@ double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, do
     double tRatio = t / sumT;
     double ans = 2.5 - (3 - tRatio) * tRatio;
     ans = ans * tRatio * tRatio * tRatio * dv + v0;
-    cout << ans << endl;
     return ans * t;
 }
 
@@ -529,7 +529,7 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
     double lenNow = (currentPoint - lastPoint).len();
     double error = targetLen - lenNow;
 
-    double tolleranceError = ds / 40.0;
+    double tolleranceError = ds / 20000.0;
 
     while (true) {
         while (abs(error) > tolleranceError) {
@@ -538,32 +538,36 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
             double dedu = lenNow / (currentU - lastU);
             // newU = lastU + error / (de/du)
             currentU = currentU + error / dedu;
-            if (currentU > 1.2) {
-                break;
+
+            // after climbing it is still over 1? the curve is finished
+            if (currentU > 1.0) {
+                if (firstPart) {
+                    resDis = (answerCurve.back() - turnPoint.B1[3]).len();
+                } else {
+                    resDis = (answerCurve.back() - turnPoint.B2[0]).len();
+                }
+                return;
             }
+
             currentPoint = turnPoint.calPoint(currentU, firstPart);
             lenNow = (currentPoint - lastPoint).len();
             error = targetLen - lenNow;
         }
 
-        if (currentU > 1.0) {
-            break;
-        }
-
+        // come to here, we reslove a U that is accurate to record
         lastPoint = currentPoint;
         answerCurve.emplace_back(currentPoint);
         targetLen = ds;
         lastU = currentU;
         currentU = lastU + increaseU;
+        // if U is bigger than 1.0, we set it to 1.0,
+        // if it can go smaller than 1, it is a good point
+        if (currentU > 1.0) {
+                currentU = 1.0;
+        }
         currentPoint = turnPoint.calPoint(currentU, firstPart);
         lenNow = (currentPoint - lastPoint).len();
         error = targetLen - lenNow;
-    }
-
-    if (firstPart) {
-        resDis = (answerCurve.back() - turnPoint.B1[3]).len();
-    } else {
-        resDis = (answerCurve.back() - turnPoint.B2[0]).len();
     }
 }
 

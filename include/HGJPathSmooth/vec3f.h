@@ -5,18 +5,22 @@
 #ifndef HELLOCPLEX_VEC3F_H
 #define HELLOCPLEX_VEC3F_H
 
+#include <ostream>
+
 namespace HGJ {
     class vec3f;
 
     vec3f operator* (double d, const vec3f & b);
     vec3f operator* (const vec3f & b, double d);
+
+    std::ostream & operator<< (std::ostream & os, const vec3f & v);
 }
 
 class HGJ::vec3f{
 
     friend vec3f operator* (double d, const vec3f & b);
+    friend std::ostream & operator<< (std::ostream & os, const vec3f & v);
 
-    //TODO 重载运算符 <<
 private:
     double x = 0.0;
     double y = 0.0;

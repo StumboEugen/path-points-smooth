@@ -72,3 +72,21 @@ void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
     halfLength = (B1[0] - B1[1]).len() + (B1[3] - B1[1]).len();
 }
 
+double HGJ::TurnPoint_s::calPreciseHalfLen() {
+    uint64_t piecesCount = 100;
+    double du = 1.0 / piecesCount;
+    double u = 0.0;
+    vec3f lastPoint;
+    vec3f currentPoint = B1[0];
+    double len = 0.0;
+    for (uint64_t i = 1; i < piecesCount; ++i) {
+        lastPoint = currentPoint;
+        u += du;
+        currentPoint = calPoint(u, true);
+        len += (currentPoint - lastPoint).len();
+
+    }
+    halfLength = len;
+    return halfLength;
+}
+
