@@ -356,7 +356,7 @@ double HGJ::pathPlanner::calChangeSpdDistance(double v0, double v1) {
  * @return f'(v1)
  */
 inline double calSlope(double v0, double v1) {
-    return (3 * v1 * v1) + (2 * v0 * v1) - (v0 * v0);   //TODO speed up
+    return (v1 + v0) * (3.0 * v1 - v0);
 }
 
 /**
@@ -364,10 +364,9 @@ inline double calSlope(double v0, double v1) {
  * @return f(v1)
  */
 inline double calFunc(double v0, double v1) {
-    return pow(v1,3) + v0 * v1 * v1 - v0 * v0 * v1 - pow(v0,3); //TODO speed up
+    return (v1 + v0) * (v1 - v0) * (v1 + v0);
 }
 
-//TODO debug required
 double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool faster) {
 
     if (!faster) {
@@ -405,7 +404,7 @@ double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool fas
     double v1Jerk = v0; //maybe not faster to start at v0
     double currentY = 0;
     double threshold = targetY * 1e-5;
-    // TODO determine the threshld
+
     while (abs(currentY - targetY) > threshold) {
         v1Jerk += (targetY - currentY) / calSlope(v0, v1Jerk);
         currentY = calFunc(v0, v1Jerk);
@@ -531,7 +530,6 @@ void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, const vec3f &
 void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart) {
     double ds = ts * turnPoint.speed;
 
-    //TODO RELEASE2DELETE
     if (ds < resDis) {
         cerr << "[pathPlanner::assignTurnPartPoints] the first Inc is < 0 !\nfirst part:"
              << firstPart << endl;

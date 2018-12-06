@@ -71,7 +71,6 @@ void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
     B1[3] = (B1[2] + B2[2]) / 2.0;
     B2[3] = B1[3];
 
-    //TODO check if this is O
     halfLength = (B1[0] - B1[1]).len() + (B1[3] - B1[1]).len();
 }
 
