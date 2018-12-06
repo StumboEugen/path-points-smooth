@@ -18,21 +18,23 @@ HGJ::pathPlanner::pathPlanner() = default;
 
 const HGJ::WayPoints &
 HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
-                          double beginSpd, double endSpd) {
+                          double beginSpdInput, double endSpdInput) {
     pathPlanner::maxErr = maxErr;
     pathPlanner::ts = ts;
-    pathPlanner::beginSpd = beginSpd;
-    pathPlanner::endSpd = endSpd;
+    pathPlanner::beginSpd = beginSpdInput;
+    pathPlanner::endSpd = endSpdInput;
 
     int64_t pointCount = wayPoints.size();
     int64_t lineCount = pointCount - 1;
     int64_t cornerCount = pointCount - 2;
 
+    // only one point is inputed, return the point
     if (pointCount <= 1) {
         cerr << "you only add 1 point" << endl;
         return wayPoints;
     }
 
+    // only two points are added, smooth the line
     if (pointCount == 2) {
         cerr << "you only add 2 points" << endl;
 
@@ -42,12 +44,14 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
 
         turnPoints.emplace_back(wayPoints[0], wayPoints[0], wayPoints[1]);
 
+        // the distance may be not long enough
         double safeDis = calChangeSpdDistance(pathPlanner::beginSpd, pathPlanner::endSpd);
         double theDis = (wayPoints[1] - wayPoints[0]).len();
         if (theDis < safeDis) {
             pathPlanner::endSpd = calBestSpdFromDistance(
                     pathPlanner::beginSpd, theDis,
                     (pathPlanner::endSpd >pathPlanner::beginSpd));
+            cerr << "the end spd is not possible, fall back to:" << pathPlanner::endSpd << endl;
             lineTypes.emplace_back(ONEACC, pathPlanner::endSpd);
         } else {
             lineTypes.push_back(
@@ -59,6 +63,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
         return answerCurve;
     }
 
+    // cal the curveLength, not used
     curveLength = 0.0;
     for (uint64_t i = 1; i < pointCount; ++i) {
         curveLength += (wayPoints[i] - wayPoints[i-1]).len();
@@ -671,6 +676,10 @@ void HGJ::pathPlanner::setBeginSpd(double beginSpd) {
 
 void HGJ::pathPlanner::setEndSpd(double endSpd) {
     pathPlanner::endSpd = endSpd;
+}
+
+const HGJ::WayPoints & HGJ::pathPlanner::getLastGeneratedCurve() {
+    return answerCurve;
 }
 
 

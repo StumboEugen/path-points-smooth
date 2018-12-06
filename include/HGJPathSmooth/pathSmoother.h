@@ -51,9 +51,21 @@ private:
 
 public:
     pathPlanner();
-    const WayPoints &
-    genCurv(const WayPoints & wayPoints, double samplePeriod, double maxErr,
-            double beginSpd1 = 0.0, double endSpd1 = 0.0);
+
+    /**
+     * gen the curv
+     * @param wayPoints the way points, can accept sth like: @example {{0,0,0},{1,2,3}}
+     * @param samplePeriod the sample period you need, in second
+     * @param maxErr the max error at the corner you can expect
+     * @param beginSpdInput the start speed of the curve
+     * @param endSpdInput the end speed of the curve
+     * @warning if the beginSpd or the endSpd is not fesible, it will be force changed
+     * @return the wayPoints with the samplePeriod
+     */
+    const WayPoints & genCurv(const WayPoints & wayPoints, double samplePeriod, double maxErr,
+            double beginSpdInput = 0.0, double endSpdInput = 0.0);
+
+    const WayPoints & getLastGeneratedCurve();
 
     void setMaxJerk(double jerkMax);
 
