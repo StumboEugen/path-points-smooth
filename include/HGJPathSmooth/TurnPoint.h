@@ -34,13 +34,14 @@ namespace HGJ {
         double maxSpd = 0;
         // the spd on this curve
         double speed = 0.0;
-        // d * coeff_d2Kmax = Kmax
-        double coeff_d2Kmax;
+        // d * coeff_d2Rmin = Kmax
+        double coeff_d2Rmin;
         // the half len of the curve, it's not accurate(smaller than real)
         double halfLength = 0.0;
 
-        // the bezier controll points
+        // the bezier controll points, 0 connect the line, 4 connect another curve
         vec3f B1[4];
+        // the bezier controll points, 0 connect the line, 4 connect another curve
         vec3f B2[4];
 
         TurnPoint_s(const vec3f & p0, const vec3f & p1, const vec3f & p2);

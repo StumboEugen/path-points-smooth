@@ -102,7 +102,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
             if (thisTurn.speed <= lastTurn.speed) {
                 violations[thisTurn.speed].push_back(i);
             } else {
-                violations[lastTurn.speed].push_back(i);
+                violations[lastTurn.speed].push_back(i-1);
             }
         }
     }
@@ -113,18 +113,18 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
         // the size of the vioIndexVector may changed
         for (uint64_t vector_i = 0; vector_i < vioIndexVector.size(); vector_i++) {
 
-            auto & thisTurn = turnPoints[vector_i];
+            auto indexOfTurns = vioIndexVector[vector_i];
+            auto & thisTurn = turnPoints[indexOfTurns];
             // this means that the turn has been modified, no need to do it again
             if (thisTurn.isSpdModifiedComplete()) {
                 continue;
             }
 
-            auto indexOfTurns = vioIndexVector[vector_i];
-
             if (indexOfTurns != 0) {
                 auto & turnBefore = turnPoints[indexOfTurns - 1];
                 if (turnBefore.speed > thisTurn.speed) {
-                    auto safeSpd = calBestSpdFromDistance(thisTurn.speed, thisTurn.lenBefore);
+                    auto safeSpd = calBestSpdFromDistance(
+                            thisTurn.speed, thisTurn.lenBefore - thisTurn.d - turnBefore.d);
                     if (turnBefore.speed > safeSpd) {
                         turnBefore.speed = safeSpd;
                         // check if the turnBefore has beforturn too
@@ -146,7 +146,8 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
             if (indexOfTurns != cornerCount - 1) {
                 auto & turnAfter = turnPoints[indexOfTurns + 1];
                 if (turnAfter.speed > thisTurn.speed) {
-                    auto safeSpd = calBestSpdFromDistance(thisTurn.speed, thisTurn.lenAfter);
+                    auto safeSpd = calBestSpdFromDistance(
+                            thisTurn.speed, thisTurn.lenAfter - thisTurn.d - turnAfter.d);
                     if (turnAfter.speed > safeSpd) {
                         turnAfter.speed = safeSpd;
                         if (indexOfTurns < cornerCount - 2) {
@@ -154,7 +155,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                             if (turnAAfter.speed > turnAfter.speed) {
                                 auto safeDis = calChangeSpdDistance
                                         (turnAAfter.speed, turnAfter.speed);
-                                if (safeDis > turnAAfter.lenAfter
+                                if (safeDis > turnAfter.lenAfter
                                               - (turnAAfter.d + turnAfter.d)) {
                                     violations[turnAfter.speed].push_back(indexOfTurns + 1);
                                 }
@@ -257,7 +258,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
 
         // the curvature of every corner should be smaller than the max curvature
         c.add(IloRange(env, -IloInfinity, 0.0));
-        double coeff_d2Kmax = turnPoints[i].coeff_d2Kmax;
+        double coeff_d2Kmax = turnPoints[i].coeff_d2Rmin;
         c[i].setLinearCoef(d[i], -coeff_d2Kmax);
         c[i].setLinearCoef(d[cornerCount], 1);
 
@@ -303,7 +304,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
 
 //    env.out() << "Solution status = " << cplex.getStatus() << endl;
 //    env.out() << "Solution value  = " << cplex.getObjValue() << endl;
-//    env.out() << "Values        = " << ds << endl;
+    env.out() << "Values        = " << ds << endl;
 
     for (int i = 0; i < ds.getSize() - 1; i++) {
         auto & tp = turnPoints[i];
@@ -400,7 +401,7 @@ HGJ::pathPlanner::calLineType(double v0, double v1, double dist) {
      * the min lenth means the speed change is only speed up or speed down from v0 to v1
      */
     double minDist = calChangeSpdDistance(v0, v1);
-    if (dist < minDist * 1.025) {
+    if (dist <= minDist * 1.025) {
         return make_pair(ONEACC, max(v0, v1));
     }
 
@@ -473,6 +474,7 @@ void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
         t += ts;
     }
 
+    auto temp = answerCurve.back();
     resDis = (answerCurve.back() - posEnd).len();
 
     if (resDis < 0) {

@@ -19,8 +19,9 @@ HGJ::TurnPoint_s::TurnPoint_s(const HGJ::vec3f & p0, const HGJ::vec3f & p1,
           beta(acos(t1 * t2) / 2),
           yita(6 * c3 * cos(beta) / (c1 + 4))
 {
-    double cb = cos(beta);
-    coeff_d2Kmax = cb * cb / (c5 * sin(beta));
+//    double cb = cos(beta);
+//    coeff_d2Rmin = cb * cb / (c5 * sin(beta));
+    coeff_d2Rmin = 1.5 * yita * yita / (c3 * sin(beta));
 }
 
 HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool isPartOne) const {
@@ -55,7 +56,9 @@ HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool isPartOne) const {
 
 void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
     TurnPoint::d = d;
-    TurnPoint::maxSpd = min(sqrt(accMax * TurnPoint::d * TurnPoint::coeff_d2Kmax), spdMax);
+    TurnPoint::maxSpd = min(sqrt(accMax * TurnPoint::d * TurnPoint::coeff_d2Rmin), spdMax);
+//    TurnPoint::maxSpd =
+//            min(sqrt(accMax / (2.0 * c3 * sin(beta) / (3.0 * yita * yita * d))), spdMax);
 
     B1[0] = p1 - t1 * d;
     B1[1] = p1 - t1 * d * (1 - c1 * c3);
