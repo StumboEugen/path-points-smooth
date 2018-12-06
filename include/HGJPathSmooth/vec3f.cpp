@@ -25,14 +25,6 @@ HGJ::vec3f HGJ::vec3f::operator+(const HGJ::vec3f & b) const {
     return res;
 }
 
-//HGJ::vec3f HGJ::vec3f::operator*(const double & b) const {
-//    vec3f res;
-//    res.x = this->x * b;
-//    res.y = this->y * b;
-//    res.z = this->z * b;
-//    return res;
-//}
-
 HGJ::vec3f HGJ::vec3f::operator/(const double & b) const {
     vec3f res;
     res.x = this->x / b;

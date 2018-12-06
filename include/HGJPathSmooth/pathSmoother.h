@@ -53,7 +53,7 @@ public:
     pathPlanner();
     const WayPoints &
     genCurv(const WayPoints & wayPoints, double samplePeriod, double maxErr,
-            double beginSpd = 0.0, double endSpd = 0.0);
+            double beginSpd1 = 0.0, double endSpd1 = 0.0);
 
     void setMaxJerk(double jerkMax);
 

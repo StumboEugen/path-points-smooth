@@ -29,15 +29,35 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     int64_t cornerCount = pointCount - 2;
 
     if (pointCount <= 1) {
+        cerr << "you only add 1 point" << endl;
         return wayPoints;
     }
 
     if (pointCount == 2) {
-        //TODO smooth
-        return wayPoints;
-    }
+        cerr << "you only add 2 points" << endl;
 
-    //TODO consider the count == 3
+        turnPoints.clear();
+        lineTypes.clear();
+        answerCurve.clear();
+
+        turnPoints.emplace_back(wayPoints[0], wayPoints[0], wayPoints[1]);
+
+        double safeDis = calChangeSpdDistance(pathPlanner::beginSpd, pathPlanner::endSpd);
+        double theDis = (wayPoints[1] - wayPoints[0]).len();
+        if (theDis < safeDis) {
+            pathPlanner::endSpd = calBestSpdFromDistance(
+                    pathPlanner::beginSpd, theDis,
+                    (pathPlanner::endSpd >pathPlanner::beginSpd));
+            lineTypes.emplace_back(ONEACC, pathPlanner::endSpd);
+        } else {
+            lineTypes.push_back(
+                    calLineType(pathPlanner::beginSpd, pathPlanner::endSpd, theDis));
+        }
+
+        answerCurve.clear();
+        assignLinePartPoints(0);
+        return answerCurve;
+    }
 
     curveLength = 0.0;
     for (uint64_t i = 1; i < pointCount; ++i) {
@@ -74,8 +94,9 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
      * check the first and the end turn, to set a better max speed
      */
     auto & firstTurn = turnPoints.front();
-    if (beginSpd < firstTurn.speed) {
-        auto betterSpd = calBestSpdFromDistance(beginSpd, firstTurn.lenBefore - firstTurn.d);
+    if (pathPlanner::beginSpd < firstTurn.speed) {
+        auto betterSpd = calBestSpdFromDistance(
+                pathPlanner::beginSpd, firstTurn.lenBefore - firstTurn.d);
         if (betterSpd < firstTurn.speed) {
             firstTurn.maxSpd = betterSpd;
             firstTurn.speed = betterSpd;
@@ -83,8 +104,8 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     }
 
     auto & endTurn = turnPoints.back();
-    if (endSpd < endTurn.speed) {
-        auto betterSpd = calBestSpdFromDistance(endSpd, endTurn.lenAfter - endTurn.d);
+    if (pathPlanner::endSpd < endTurn.speed) {
+        auto betterSpd = calBestSpdFromDistance(pathPlanner::endSpd, endTurn.lenAfter - endTurn.d);
         if (betterSpd < endTurn.speed) {
             endTurn.maxSpd = betterSpd;
             endTurn.speed = betterSpd;
@@ -169,32 +190,32 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
         }
     }
 
-    if (firstTurn.speed < beginSpd) {
-        auto safeDis = calChangeSpdDistance(firstTurn.speed, beginSpd);
+    if (firstTurn.speed < pathPlanner::beginSpd) {
+        auto safeDis = calChangeSpdDistance(firstTurn.speed, pathPlanner::beginSpd);
         if (safeDis < firstTurn.lenBefore - firstTurn.d) {
             auto safeSpd = calBestSpdFromDistance(firstTurn.speed,
                     firstTurn.lenBefore - firstTurn.d);
-            cerr << "[WARNING] the begin speed you set is not safe:" << beginSpd <<
+            cerr << "[WARNING] the begin speed you set is not safe:" << pathPlanner::beginSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
-            beginSpd = safeSpd;
+            pathPlanner::beginSpd = safeSpd;
         }
     }
 
-    if (endTurn.speed < endSpd) {
-        auto safeDis = calChangeSpdDistance(endTurn.speed, endSpd);
+    if (endTurn.speed < pathPlanner::endSpd) {
+        auto safeDis = calChangeSpdDistance(endTurn.speed, pathPlanner::endSpd);
         if (safeDis < endTurn.lenAfter - endTurn.d) {
             auto safeSpd = calBestSpdFromDistance(endTurn.speed,
                     endTurn.lenAfter - endTurn.d);
-            cerr << "[WARNING] the end speed you set is not safe:" << endSpd <<
+            cerr << "[WARNING] the end speed you set is not safe:" << pathPlanner::endSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
-            endSpd = safeSpd;
+            pathPlanner::endSpd = safeSpd;
         }
     }
 
     /**
      * cal the max speed in the linear duration
      */
-    lineTypes.front() = calLineType(beginSpd, turnPoints.front().speed,
+    lineTypes.front() = calLineType(pathPlanner::beginSpd, turnPoints.front().speed,
             turnPoints.front().lenBefore - turnPoints.front().d);
 
     for (uint64_t index_line = 1; index_line < lineTypes.size() - 1; ++index_line) {
@@ -204,7 +225,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                 beforeTurn.lenAfter - beforeTurn.d - afterTurn.d);
     }
 
-    lineTypes.back() = calLineType(turnPoints.back().speed, endSpd,
+    lineTypes.back() = calLineType(turnPoints.back().speed, pathPlanner::endSpd,
             turnPoints.back().lenAfter - turnPoints.back().d);
 
     /**
@@ -250,7 +271,8 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
 
     // adding the d varibles
     for (int i = 0; i < cornerCount; i++) {
-        d.add(IloNumVar(env, 0.0, +IloInfinity));
+        double maxLen = min(turnPoints[i].lenAfter, turnPoints[i].lenBefore);
+        d.add(IloNumVar(env, 0.0, maxLen * 0.45));
     }
     d.add(IloNumVar(env, 0.0, +IloInfinity));
 
@@ -265,7 +287,7 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
         // the optimization target
         obj.setLinearCoef(d[i], -coeff_d2Kmax);
     }
-    obj.setLinearCoef(d[cornerCount], - cornerCount + 1.0);
+    obj.setLinearCoef(d[cornerCount], - cornerCount + 1);
 
     double coeff_beta2d = c4 * maxErr;
     for (int i = 0; i < cornerCount; i++) {
@@ -382,8 +404,9 @@ double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool fas
 
     double v1Jerk = v0; //maybe not faster to start at v0
     double currentY = 0;
+    double threshold = targetY * 1e-5;
     // TODO determine the threshld
-    while (abs(currentY - targetY) > 0.0001) {
+    while (abs(currentY - targetY) > threshold) {
         v1Jerk += (targetY - currentY) / calSlope(v0, v1Jerk);
         currentY = calFunc(v0, v1Jerk);
     }
@@ -459,6 +482,9 @@ double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, do
 void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
                                              const vec3f & posBegin, const vec3f & posEnd) {
     auto unitVec = (posEnd - posBegin);
+    if (unitVec.len() == 0.0) {
+        return;
+    }
     unitVec /= unitVec.len();
     double dv = endV - beginV;
     double sumT = calChangeSpdDuration(dv);
@@ -474,7 +500,6 @@ void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
         t += ts;
     }
 
-    auto temp = answerCurve.back();
     resDis = (answerCurve.back() - posEnd).len();
 
     if (resDis < 0) {
