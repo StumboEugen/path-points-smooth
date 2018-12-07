@@ -19,34 +19,43 @@ HGJ::pathPlanner::pathPlanner() = default;
 const HGJ::WayPoints &
 HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                           double beginSpdInput, double endSpdInput) {
+
+    /// load the setting
     pathPlanner::maxErr = maxErr;
     pathPlanner::ts = ts;
     pathPlanner::beginSpd = beginSpdInput;
     pathPlanner::endSpd = endSpdInput;
 
+    /// cal the point count
     int64_t pointCount = wayPoints.size();
     int64_t lineCount = pointCount - 1;
     int64_t cornerCount = pointCount - 2;
 
-    // only one point is inputed, return the point
+    /// clear the last calculation
+    resDis = 0.0;
+    answerCurve.clear();
+
+    /// only one(zero) point is inputed, return the point
     if (pointCount <= 1) {
         cerr << "you only add 1 point" << endl;
+        answerCurve = wayPoints;
         return wayPoints;
     }
 
-    // only two points are added, smooth the line
+    /// only two points are added, smooth the line
     if (pointCount == 2) {
         cerr << "you only add 2 points" << endl;
 
         turnPoints.clear();
         lineTypes.clear();
-        answerCurve.clear();
 
         turnPoints.emplace_back(wayPoints[0], wayPoints[0], wayPoints[1]);
 
-        // the distance may be not long enough
+        /// the distance may be not long enough for the speed change
         double safeDis = calChangeSpdDistance(pathPlanner::beginSpd, pathPlanner::endSpd);
         double theDis = (wayPoints[1] - wayPoints[0]).len();
+
+        /// the distance is not long enough, the end speed need to be modified
         if (theDis < safeDis) {
             pathPlanner::endSpd = calBestSpdFromDistance(
                     pathPlanner::beginSpd, theDis,
@@ -58,19 +67,17 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                     calLineType(pathPlanner::beginSpd, pathPlanner::endSpd, theDis));
         }
 
-        answerCurve.clear();
         assignLinePartPoints(0);
         return answerCurve;
     }
 
-    // cal the curveLength, not used
+    /// cal the curveLength, not used for now
     curveLength = 0.0;
     for (uint64_t i = 1; i < pointCount; ++i) {
         curveLength += (wayPoints[i] - wayPoints[i-1]).len();
     }
 
-    answerCurve.clear();
-
+    /// init the containers
     lineTypes.clear();
     lineTypes.reserve(static_cast<unsigned long>(lineCount));
     lineTypes.assign(static_cast<unsigned long>(lineCount), make_pair(UNSET, 0));
@@ -78,42 +85,45 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     turnPoints.clear();
     turnPoints.reserve(static_cast<unsigned long>(cornerCount));
     for (int64_t i = 0; i < cornerCount; i++) {
+        /// in the constructor, parameters about the corner are all calculated
         turnPoints.emplace_back(wayPoints[i], wayPoints[i + 1], wayPoints[i + 2]);
     }
-    vector<TurnPoint> & bezierCorners = turnPoints;
 
-    // the answers will be stored in "bezierCorners"
-    lpSolveTheDs(bezierCorners);
+    /// the answers(d) will be stored in "turnPoints"
+    lpSolveTheDs(turnPoints);
 
-
-    // firstly set the speed of every corner to max
-    for (auto & corner : bezierCorners) {
+    /// firstly set the speed of every corner to max
+    for (auto & corner : turnPoints) {
         corner.speed = corner.maxSpd;
     }
 
-    // check the speed of every corner continously until they are all ok
-    // map<speed, turns> in order of speed
-    map<double, vector<uint64_t>> violations;
+    ///  check the speed of every corner continously until they are all ok.
 
     /**
-     * check the first and the end turn, to set a better max speed
+     *  the violations: the length between two turns can't satisfy the speed change between
+     *  two max speed. the results are stored in map(speed, turns) in order of speed
      */
+    map<double, vector<uint64_t>> violations;
+
+    /// check the first and the end turn, to set a better max speed
+    /// which solve the condition when the begin/end speed is too small for the first/end turn
     auto & firstTurn = turnPoints.front();
     if (pathPlanner::beginSpd < firstTurn.speed) {
-        auto betterSpd = calBestSpdFromDistance(
+        auto safeSpd = calBestSpdFromDistance(
                 pathPlanner::beginSpd, firstTurn.lenBefore - firstTurn.d);
-        if (betterSpd < firstTurn.speed) {
-            firstTurn.maxSpd = betterSpd;
-            firstTurn.speed = betterSpd;
+        if (safeSpd < firstTurn.speed) {
+            firstTurn.maxSpd = safeSpd;
+            firstTurn.speed = safeSpd;
         }
     }
 
     auto & endTurn = turnPoints.back();
     if (pathPlanner::endSpd < endTurn.speed) {
-        auto betterSpd = calBestSpdFromDistance(pathPlanner::endSpd, endTurn.lenAfter - endTurn.d);
-        if (betterSpd < endTurn.speed) {
-            endTurn.maxSpd = betterSpd;
-            endTurn.speed = betterSpd;
+        auto safeSpd = calBestSpdFromDistance(
+                pathPlanner::endSpd, endTurn.lenAfter - endTurn.d);
+        if (safeSpd < endTurn.speed) {
+            endTurn.maxSpd = safeSpd;
+            endTurn.speed = safeSpd;
         }
     }
 
@@ -125,7 +135,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
         auto & lastTurn = turnPoints[i - 1];
         auto minDis = calChangeSpdDistance(lastTurn.speed, thisTurn.speed);
         if (minDis > thisTurn.lenBefore - thisTurn.d - lastTurn.d) {
-            if (thisTurn.speed <= lastTurn.speed) {
+            if (thisTurn.speed < lastTurn.speed) {
                 violations[thisTurn.speed].push_back(i);
             } else {
                 violations[lastTurn.speed].push_back(i-1);
@@ -133,28 +143,32 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
         }
     }
 
+    /// modify the speed continusly, from the slower to faster to ensure the plan is the best.
+    /// in the progress, new violations might be added
     for (auto & vioVectorPair: violations) {
+
+        /// the index which violated at speed of "vioVectorPair.first"
         auto & vioIndexVector = vioVectorPair.second;
 
-        // the size of the vioIndexVector may changed
+        /// the size of the vioIndexVector may changed, C++11 for (:) CAN NOT be used
         for (uint64_t vector_i = 0; vector_i < vioIndexVector.size(); vector_i++) {
 
             auto indexOfTurns = vioIndexVector[vector_i];
             auto & thisTurn = turnPoints[indexOfTurns];
-            // this means that the turn has been modified, no need to do it again
+
+            /// this means that the turn has been modified, no need to do it again
             if (thisTurn.isSpdModifiedComplete()) {
                 continue;
             }
 
-            if (indexOfTurns != 0) {
+            if (indexOfTurns != 0) { /// it's not the first turn, check the spd of perious turn
                 auto & turnBefore = turnPoints[indexOfTurns - 1];
                 if (turnBefore.speed > thisTurn.speed) {
                     auto safeSpd = calBestSpdFromDistance(
                             thisTurn.speed, thisTurn.lenBefore - thisTurn.d - turnBefore.d);
-                    if (turnBefore.speed > safeSpd) {
+                    if (turnBefore.speed > safeSpd) { /// turnBefore.speed is too fast!
                         turnBefore.speed = safeSpd;
-                        // check if the turnBefore has beforturn too
-                        if (indexOfTurns > 1) {
+                        if (indexOfTurns > 1) { /// check if the BBfore Turn becomces violation
                             auto & turnBBefore = turnPoints[indexOfTurns - 2];
                             if (turnBBefore.speed > turnBefore.speed) {
                                 auto safeDis = calChangeSpdDistance
@@ -169,6 +183,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                 }
             }
 
+            /// it's almost the same as last section
             if (indexOfTurns != cornerCount - 1) {
                 auto & turnAfter = turnPoints[indexOfTurns + 1];
                 if (turnAfter.speed > thisTurn.speed) {
@@ -191,15 +206,19 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
                 }
             }
 
+            /// one turn may be modified twice
             thisTurn.completeSpdModify();
         }
     }
 
+
+    /// at here, the spd of every turn has been set to the fastest speed.
+    /// if the beginSpd or the endSpd are too fast, they need to be slower down
     if (firstTurn.speed < pathPlanner::beginSpd) {
         auto safeDis = calChangeSpdDistance(firstTurn.speed, pathPlanner::beginSpd);
-        if (safeDis < firstTurn.lenBefore - firstTurn.d) {
-            auto safeSpd = calBestSpdFromDistance(firstTurn.speed,
-                    firstTurn.lenBefore - firstTurn.d);
+        auto theReadDis = firstTurn.lenBefore - firstTurn.d;
+        if (safeDis < theReadDis) {
+            auto safeSpd = calBestSpdFromDistance(firstTurn.speed, theReadDis);
             cerr << "[WARNING] the begin speed you set is not safe:" << pathPlanner::beginSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
             pathPlanner::beginSpd = safeSpd;
@@ -208,9 +227,9 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
 
     if (endTurn.speed < pathPlanner::endSpd) {
         auto safeDis = calChangeSpdDistance(endTurn.speed, pathPlanner::endSpd);
-        if (safeDis < endTurn.lenAfter - endTurn.d) {
-            auto safeSpd = calBestSpdFromDistance(endTurn.speed,
-                    endTurn.lenAfter - endTurn.d);
+        auto theReadDis = endTurn.lenAfter - endTurn.d;
+        if (safeDis < theReadDis) {
+            auto safeSpd = calBestSpdFromDistance(endTurn.speed, theReadDis);
             cerr << "[WARNING] the end speed you set is not safe:" << pathPlanner::endSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
             pathPlanner::endSpd = safeSpd;
@@ -218,7 +237,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     }
 
     /**
-     * cal the max speed in the linear duration
+     * cal the speed type of erery line progress
      */
     lineTypes.front() = calLineType(pathPlanner::beginSpd, turnPoints.front().speed,
             turnPoints.front().lenBefore - turnPoints.front().d);
@@ -236,9 +255,6 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     /**
      * plan the speed according to the ts
      */
-
-    resDis = 0.0;
-
     for (uint32_t i = 0; i < turnPoints.size(); ++i) {
         assignLinePartPoints(i);
         assignTurnPartPoints(turnPoints[i], true);
@@ -268,74 +284,75 @@ void HGJ::pathPlanner::lpSolveTheDs(vector<TurnPoint> & turnPoints) {
     /**
      * constrictions
      */
-    IloRangeArray c(env);
+    IloRangeArray constrictions(env);
     /**
-     * the optimize opject
+     * the optimize target  (-sum(d) - n*maxcurvature)  minnest
      */
-    IloObjective obj = IloMinimize(env);
+    IloObjective optimizeTarget = IloMinimize(env);
 
-    // adding the d varibles
+    /// adding the d varibles
     for (int i = 0; i < cornerCount; i++) {
-        double maxLen = min(turnPoints[i].lenAfter, turnPoints[i].lenBefore);
-        d.add(IloNumVar(env, 0.0, maxLen * 0.45));
+        double minLen = min(turnPoints[i].lenAfter, turnPoints[i].lenBefore);
+        /// adding 0.45 for some speed change is available in some situations
+        d.add(IloNumVar(env, 0.0, minLen * 0.45));
     }
+    /// this is the max curvature
     d.add(IloNumVar(env, 0.0, +IloInfinity));
 
     for (int i = 0; i < cornerCount; i++) {
-
-        // the curvature of every corner should be smaller than the max curvature
-        c.add(IloRange(env, -IloInfinity, 0.0));
+        /// the curvature of every corner should be smaller than the max curvature
+        constrictions.add(IloRange(env, -IloInfinity, 0.0));
         double coeff_d2Kmax = turnPoints[i].coeff_d2Rmin;
-        c[i].setLinearCoef(d[i], -coeff_d2Kmax);
-        c[i].setLinearCoef(d[cornerCount], 1);
+        constrictions[i].setLinearCoef(d[i], -coeff_d2Kmax);
+        constrictions[i].setLinearCoef(d[cornerCount], 1);
 
-        // the optimization target
-        obj.setLinearCoef(d[i], -coeff_d2Kmax);
+        /// the optimization target of Ds
+        optimizeTarget.setLinearCoef(d[i], -coeff_d2Kmax);
     }
-    obj.setLinearCoef(d[cornerCount], - cornerCount + 1);
+    /// the maxcurvature with coeff of n-1
+    optimizeTarget.setLinearCoef(d[cornerCount], - cornerCount + 1);
 
     double coeff_beta2d = c4 * maxErr;
     for (int i = 0; i < cornerCount; i++) {
-
-        // d should not be too big to bigger than the max error
-        c.add(IloRange(env, -IloInfinity, coeff_beta2d / cos(turnPoints[i].beta)));
-        c[cornerCount + i].setLinearCoef(d[i], 1);
+        /// d should not be too big to bigger than the global max error
+        constrictions.add(IloRange(env, -IloInfinity, coeff_beta2d / cos(turnPoints[i].beta)));
+        constrictions[cornerCount + i].setLinearCoef(d[i], 1);
     }
 
+    /// d0 + d1 <= len(p1p2), might be useless with 0.45 coeff
     for (int i = 0; i < cornerCount - 1; i++) {
-
-        // d0 + d1 <= len(p1p2)
-        c.add(IloRange(env, -IloInfinity , turnPoints[i].lenAfter));
-        c[cornerCount * 2 + i].setLinearCoef(d[i], 1);
-        c[cornerCount * 2 + i].setLinearCoef(d[i + 1], 1);
+        constrictions.add(IloRange(env, -IloInfinity , turnPoints[i].lenAfter));
+        constrictions[cornerCount * 2 + i].setLinearCoef(d[i], 1);
+        constrictions[cornerCount * 2 + i].setLinearCoef(d[i + 1], 1);
     }
 
-    // d0 < len(p0p1) / 2
-    c.add(IloRange(env, -IloInfinity , turnPoints.front().lenBefore / 2.0));
-    c[cornerCount * 3 - 1].setLinearCoef(d[0], 1);
+    /// d0 < len(p0p1) / 2 (leave the space for speed up
+    constrictions.add(IloRange(env, -IloInfinity , turnPoints.front().lenBefore / 2.0));
+    constrictions[cornerCount * 3 - 1].setLinearCoef(d[0], 1);
 
-    // dn < len(pn pn+1) / 2
-    c.add(IloRange(env, -IloInfinity , turnPoints.back().lenAfter / 2.0));
-    c[cornerCount * 3].setLinearCoef(d[cornerCount - 1], 1);
+    /// dn < len(pn pn+1) / 2
+    constrictions.add(IloRange(env, -IloInfinity , turnPoints.back().lenAfter / 2.0));
+    constrictions[cornerCount * 3].setLinearCoef(d[cornerCount - 1], 1);
 
-    model.add(obj);
-    model.add(c);
+    model.add(optimizeTarget);
+    model.add(constrictions);
 
     IloCplex cplex(model);
 
     cplex.solve();
 
     IloNumArray ds(env);
-    IloNumArray vals(env);
     cplex.getValues(ds, d);
 
 //    env.out() << "Solution status = " << cplex.getStatus() << endl;
 //    env.out() << "Solution value  = " << cplex.getObjValue() << endl;
     env.out() << "Values        = " << ds << endl;
 
+    /// load the answers(d)
     for (int i = 0; i < ds.getSize() - 1; i++) {
         auto & tp = turnPoints[i];
         tp.setD(static_cast<double>(ds[i]), spdMax, accMax);
+        /// use precise len may speed up the progress. but not tested
 //        tp.calPreciseHalfLen();
         curveLength += 2 * (tp.halfLength - tp.d);
     }
@@ -356,6 +373,16 @@ double HGJ::pathPlanner::calChangeSpdDistance(double v0, double v1) {
 }
 
 /**
+ * represent the maxJerk when speed change form v0 to v1
+ * f(v1) = v1^3 + v0v1^2 - v0^2v1 - v0^3
+ * @return f(v1)
+ */
+inline double calFunc(double v0, double v1) {
+    return (v1 + v0) * (v1 - v0) * (v1 + v0);
+}
+
+/**
+ * the gradient of the previous function
  * f(v1) = v1^3 + v0v1^2 - v0^2v1 - v0^3
  * f'(v1) = 3v1^2 + 2v0v1 - v0^2
  * @return f'(v1)
@@ -364,26 +391,18 @@ inline double calSlope(double v0, double v1) {
     return (v1 + v0) * (3.0 * v1 - v0);
 }
 
-/**
- * f(v1) = v1^3 + v0v1^2 - v0^2v1 - v0^3
- * @return f(v1)
- */
-inline double calFunc(double v0, double v1) {
-    return (v1 + v0) * (v1 - v0) * (v1 + v0);
-}
-
 double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool faster) {
 
     if (!faster) {
-        cerr << "slower example" << endl;
+        cout << "[calBestSpdFromDistance] slower example" << endl;
     }
 
     if (abs(dist) < 0.01) {
         return v0;
     }
 
-    // cal the v1Acc
-    double tempSqrtDiff = 16.0 * accMax / 15.0 * dist;
+    /// cal the vel from the accMax constract
+    double tempSqrtDiff = 1.06666666666 * accMax * dist;
     double v1Acc;
     if (faster) {
         v1Acc = sqrt(v0 * v0 + tempSqrtDiff);
@@ -395,18 +414,22 @@ double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool fas
         }
     }
 
-    // cal the v1Jerk
-    // solve the qubic function
+    /// cal the vel from the jerkMax constract
+    /// solve the qubic function using gradient descent
+    /// targetY represent the speed related to the JerkMax
     double targetY = 0.69282 * dist * dist * jerkMax;
     if (!faster) {
         targetY = - targetY;
-        double min = calFunc(v0, v0 / 3.0);
-        if (min < targetY) {
+        /// the function cal the min jerk, there is a local min at v0/3
+        double minJerk = calFunc(v0, v0 / 3.0);
+        /// if the min is small enough, the constraction is from the accMax, return the v1Acc
+        if (minJerk < targetY) {
             return v1Acc;
         }
     }
 
-    double v1Jerk = v0; //maybe not faster to start at v0
+    /// starting at v0, the gradient descent progress may be not fast
+    double v1Jerk = v0;
     double currentY = 0;
     double threshold = targetY * 1e-5;
 
@@ -424,16 +447,16 @@ double HGJ::pathPlanner::calBestSpdFromDistance(double v0, double dist, bool fas
 
 pair<HGJ::pathPlanner::LinearSpdType, double>
 HGJ::pathPlanner::calLineType(double v0, double v1, double dist) {
-    /**
-     * the min lenth means the speed change is only speed up or speed down from v0 to v1
-     */
+
+    /// the min lenth means the speed change is only speed up or speed down from v0 to v1
     double minDist = calChangeSpdDistance(v0, v1);
     if (dist <= minDist * 1.025) {
         return make_pair(ONEACC, max(v0, v1));
     }
 
-    double maxDist = calLineDistance(v0, v1, spdMax);
-    double distDiff = maxDist - dist;
+    /// the min dist needed if we want to speed up to spdMax
+    double minDist2SpdMax = calLineSpdUpDownMinDistance(v0, v1, spdMax);
+    double distDiff = minDist2SpdMax - dist;
 
     /**
      * if maxDist < dist, means we can speed up to the max speed in the line
@@ -442,13 +465,14 @@ HGJ::pathPlanner::calLineType(double v0, double v1, double dist) {
         return make_pair(TOMAXSPD, spdMax);
     }
 
+    /// if not, using dichotomy to find the max speed we can reach
     double upperBound = spdMax;
     double lowerBound = max(v0, v1);
     double midSpd = (upperBound + lowerBound) / 2;
-    double tollerance = dist / 10000.0;
+    double tollerance = dist / 1000.0;
 
     while (true) {
-        distDiff = calLineDistance(v0, v1, midSpd) - dist;
+        distDiff = calLineSpdUpDownMinDistance(v0, v1, midSpd) - dist;
         /**
          * CaledDist > realDist  ==>  spd need to be slower
          */
@@ -470,7 +494,7 @@ HGJ::pathPlanner::calLineType(double v0, double v1, double dist) {
     return make_pair(SPDUPDOWN, midSpd);
 }
 
-double HGJ::pathPlanner::calLineDistance(double v0, double v1, double vMid) {
+double HGJ::pathPlanner::calLineSpdUpDownMinDistance(double v0, double v1, double vMid) {
     auto dist = calChangeSpdDistance(v0, vMid);
     dist += calChangeSpdDistance(vMid, v1);
     return dist;
@@ -485,36 +509,48 @@ double HGJ::pathPlanner::calChangeSpdPosition(double v0, double dv, double t, do
 
 void HGJ::pathPlanner::assignSpdChangePoints(double beginV, double endV,
                                              const vec3f & posBegin, const vec3f & posEnd) {
-    auto unitVec = (posEnd - posBegin);
+    auto unitVec = posEnd - posBegin;
+
+    /// means there is noting to assign
     if (unitVec.len() == 0.0) {
         return;
     }
+
     unitVec /= unitVec.len();
     double dv = endV - beginV;
     double sumT = calChangeSpdDuration(dv);
+
+    /// at the begin of the whole progress, the progress t_init will be NAN
     double t = ts - resDis / beginV;
     if (beginV == 0.0) {
         t = 0.0;
     }
-    double progress;
 
+    double distProgress;
+
+    /// build the points
     while (t < sumT) {
-        progress = calChangeSpdPosition(beginV, dv, t, sumT);
-        answerCurve.emplace_back(posBegin + unitVec * progress);
+        distProgress = calChangeSpdPosition(beginV, dv, t, sumT);
+        answerCurve.emplace_back(posBegin + unitVec * distProgress);
         t += ts;
     }
 
-    resDis = (answerCurve.back() - posEnd).len();
+    if (!answerCurve.empty()) {
+        resDis = (answerCurve.back() - posEnd).len();
+    }
 
     if (resDis < 0) {
         cerr << "[pathPlanner::calChangeSpdPosition] reDis:" << resDis
-             <<" is smaller than ""0!" << endl;
+             <<" is smaller than 0!" << endl;
     }
 }
 
 void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, const vec3f & posBegin,
                                                        const vec3f & posEnd) {
-    auto unitVec = (posEnd - posBegin);
+    auto unitVec = posEnd - posBegin;
+    if (unitVec.len() == 0.0) {
+        return;
+    }
     double sumT = unitVec.len() / spd;
     unitVec /= unitVec.len();
     double t = ts - resDis / spd;
@@ -524,7 +560,9 @@ void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, const vec3f &
         t += ts;
     }
 
-    resDis = (answerCurve.back() - posEnd).len();
+    if (!answerCurve.empty()) {
+        resDis = (answerCurve.back() - posEnd).len();
+    }
 
     if (resDis < 0) {
         cerr << "[pathPlanner::assignLinearConstantSpeedPoints] reDis:" << resDis
@@ -533,6 +571,8 @@ void HGJ::pathPlanner::assignLinearConstantSpeedPoints(double spd, const vec3f &
 }
 
 void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart) {
+
+    /// at the corner, the speed is constrant, so the point gap is constrant
     double ds = ts * turnPoint.speed;
 
     if (ds < resDis) {
@@ -541,8 +581,9 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
         resDis = ds;
     }
 
+    /// the dU between the gap is about ds/wholeLen
     double increaseU = ds / turnPoint.halfLength;
-    double firstIncU = (ds - resDis) / turnPoint.halfLength;
+    double firstU = (ds - resDis) / turnPoint.halfLength;
 
     double lastU = 0.0;
     vec3f lastPoint;
@@ -552,8 +593,8 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
         lastPoint = turnPoint.B2[3];
     }
 
-    // considering the res error, the first currentU, targetLen is different
-    double currentU = firstIncU;
+    /// considering the res error, the first currentU, targetLen is different
+    double currentU = firstU;
     vec3f currentPoint = turnPoint.calPoint(currentU, firstPart);
     double targetLen = ds - resDis;
     double lenNow = (currentPoint - lastPoint).len();
@@ -563,13 +604,13 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
 
     while (true) {
         while (abs(error) > tolleranceError) {
-            // we need to modify the current U
-            // de/du = -len(C0C1) / delta(U)
+            /// we need to modify the current U
+            /// de/du = -len(C0C1) / delta(U)
             double dedu = lenNow / (currentU - lastU);
-            // newU = lastU + error / (de/du)
+            /// newU = lastU + error / (de/du)
             currentU = currentU + error / dedu;
 
-            // after climbing it is still over 1? the curve is finished
+            /// after climbing it is still over 1? the curve is finished
             if (currentU > 1.0) {
                 if (firstPart) {
                     resDis = (answerCurve.back() - turnPoint.B1[3]).len();
@@ -584,16 +625,16 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
             error = targetLen - lenNow;
         }
 
-        // come to here, we reslove a U that is accurate to record
+        /// come to here, we reslove a U that is accurate to record
         lastPoint = currentPoint;
         answerCurve.emplace_back(currentPoint);
         targetLen = ds;
         lastU = currentU;
         currentU = lastU + increaseU;
-        // if U is bigger than 1.0, we set it to 1.0,
-        // if it can go smaller than 1, it is a good point
+        /// if U is bigger than 1.0, we set it to 1.0,
+        /// if it can go smaller than 1, it is a good point
         if (currentU > 1.0) {
-                currentU = 1.0;
+            currentU = 1.0;
         }
         currentPoint = turnPoint.calPoint(currentU, firstPart);
         lenNow = (currentPoint - lastPoint).len();
@@ -604,6 +645,8 @@ void HGJ::pathPlanner::assignTurnPartPoints(const TurnPoint & turnPoint, bool fi
 void HGJ::pathPlanner::assignLinePartPoints(uint64_t index) {
     vec3f beginPos, endPos;
     double beginSpd, endSpd;
+
+    /// at the start point and the end point, the spd and pos are special
     if (index == 0) {
         beginPos = turnPoints.front().p0;
         beginSpd = pathPlanner::beginSpd;
@@ -655,27 +698,27 @@ void HGJ::pathPlanner::assignLinePartPoints(uint64_t index) {
 }
 
 void HGJ::pathPlanner::setMaxJerk(double jerkMax) {
-    pathPlanner::jerkMax = jerkMax;
+    if (jerkMax > 0) {
+        pathPlanner::jerkMax = jerkMax;
+    }
 }
 
 void HGJ::pathPlanner::setMaxAcc(double accMax) {
-    pathPlanner::accMax = accMax;
+    if (accMax > 0) {
+        pathPlanner::accMax = accMax;
+    }
 }
 
 void HGJ::pathPlanner::setMaxSpeed(double spdMax) {
-    pathPlanner::spdMax = spdMax;
+    if (spdMax > 0) {
+        pathPlanner::spdMax = spdMax;
+    }
 }
 
 void HGJ::pathPlanner::setMaxErr(double maxErr) {
-    pathPlanner::maxErr = maxErr;
-}
-
-void HGJ::pathPlanner::setBeginSpd(double beginSpd) {
-    pathPlanner::beginSpd = beginSpd;
-}
-
-void HGJ::pathPlanner::setEndSpd(double endSpd) {
-    pathPlanner::endSpd = endSpd;
+    if (maxErr > 0) {
+        pathPlanner::maxErr = maxErr;
+    }
 }
 
 const HGJ::WayPoints & HGJ::pathPlanner::getLastGeneratedCurve() {

@@ -10,7 +10,9 @@
 namespace HGJ {
     class vec3f;
 
+    /// for LR able to swap, moving function out of the member function
     vec3f operator* (double d, const vec3f & b);
+    /// for LR able to swap, moving function out of the member function
     vec3f operator* (const vec3f & b, double d);
 
     std::ostream & operator<< (std::ostream & os, const vec3f & v);

@@ -34,22 +34,43 @@ class HGJ::pathPlanner {
     };
 
 private:
-    // it is not accurate
+    /// the whole length of the curve
+    /// which is not accurate
     double curveLength;
+
+    /// the result curve will be stored for query
     WayPoints answerCurve;
+
+    /// represent every turn points(begin and the end point are not included)
     std::vector<TurnPoint> turnPoints;
+
+    /// the speed type of every line @enum LinearSpdType
     std::vector<std::pair<LinearSpdType, double>> lineTypes;
+
     double jerkMax = 2.0;
     double accMax = 1.0;
     double spdMax = 2.0;
+
+    /// the biggest difference between the curve and the point
     double maxErr = 0.5;
+
+    /// the speed at the beginning of the whole curve (after modify)
     double beginSpd = 0.0;
+
+    /// the speed at the end of the whole curve (after modify)
     double endSpd = 0.0;
+
+    /// the sample period in second
     double ts = 0.01;
-    // the little gap rest when last progress not finished
+
+    /// the little gap rest when last progress not finished
+    /// @example in the end of last proress(line or curve) speed = 1 and ts = 0.1, the point
+             /// rest 0.05m, than there will be 0.05m rest for next part to feed
     double resDis;
 
 public:
+
+    /// the default constructor, the parameters are set as default
     pathPlanner();
 
     /**
@@ -75,11 +96,12 @@ public:
 
     void setMaxErr(double maxErr);
 
-    void setBeginSpd(double beginSpd);
-
-    void setEndSpd(double endSpd);
-
 private:
+
+    /**
+     * the answers(d) will be stored in "turnPoints"
+     * @param turnPoints the turnPoints (curve part)
+     */
     void lpSolveTheDs(std::vector<TurnPoint> & turnPoints);
     /**
      * cal the time needed in the linear speed change progress
@@ -126,13 +148,13 @@ private:
     inline std::pair<LinearSpdType, double> calLineType(double v0, double v1, double dist);
 
     /**
-     * cal the min distance needed when using the v0 v1 and vMind
+     * cal the min distance needed when using the v0 v1 and vMid
      * @param v0 begin speed
      * @param v1 end speed
      * @param vMid the max speed in the middle[
      * @return the min distance needed
      */
-    inline double calLineDistance(double v0, double v1, double vMid);
+    inline double calLineSpdUpDownMinDistance(double v0, double v1, double vMid);
 
     /**
      * assign the points to answerPoints at speed change stage
@@ -156,6 +178,11 @@ private:
      */
     void assignTurnPartPoints(const TurnPoint & turnPoint, bool firstPart);
 
+    /**
+     * assign the points in line part
+     * @param index for index = i, represent the ith line, from point i to i+1, the line
+     * before turn[i]
+     */
     void assignLinePartPoints(uint64_t index);
 };
 

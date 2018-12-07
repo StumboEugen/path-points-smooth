@@ -56,6 +56,8 @@ HGJ::vec3f HGJ::TurnPoint_s::calPoint(double u, bool isPartOne) const {
 
 void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
     TurnPoint::d = d;
+
+    /// after setting the D, we can know the maxSpd of this corner
     TurnPoint::maxSpd = min(sqrt(accMax * TurnPoint::d * TurnPoint::coeff_d2Rmin), spdMax);
 //    TurnPoint::maxSpd =
 //            min(sqrt(accMax / (2.0 * c3 * sin(beta) / (3.0 * yita * yita * d))), spdMax);
@@ -75,6 +77,8 @@ void HGJ::TurnPoint_s::setD(double d, double spdMax, double accMax) {
 }
 
 double HGJ::TurnPoint_s::calPreciseHalfLen() {
+
+    /// divide the line into 100 pieces to cal the length
     uint64_t piecesCount = 100;
     double du = 1.0 / piecesCount;
     double u = 0.0;
