@@ -217,7 +217,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     if (firstTurn.speed < pathPlanner::beginSpd) {
         auto safeDis = calChangeSpdDistance(firstTurn.speed, pathPlanner::beginSpd);
         auto theReadDis = firstTurn.lenBefore - firstTurn.d;
-        if (safeDis < theReadDis) {
+        if (safeDis > theReadDis) {
             auto safeSpd = calBestSpdFromDistance(firstTurn.speed, theReadDis);
             cerr << "[WARNING] the begin speed you set is not safe:" << pathPlanner::beginSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
@@ -228,7 +228,7 @@ HGJ::pathPlanner::genCurv(const WayPoints & wayPoints, double ts, double maxErr,
     if (endTurn.speed < pathPlanner::endSpd) {
         auto safeDis = calChangeSpdDistance(endTurn.speed, pathPlanner::endSpd);
         auto theReadDis = endTurn.lenAfter - endTurn.d;
-        if (safeDis < theReadDis) {
+        if (safeDis > theReadDis) {
             auto safeSpd = calBestSpdFromDistance(endTurn.speed, theReadDis);
             cerr << "[WARNING] the end speed you set is not safe:" << pathPlanner::endSpd <<
                     " ,the plan will use the max safe speed: " << safeSpd << endl;
